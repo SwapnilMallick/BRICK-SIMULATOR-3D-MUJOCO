@@ -1,0 +1,20 @@
+<mujoco model="green_plaex_long_preview">
+  <compiler angle="degree" coordinate="local" autolimits="true"/>
+  <option timestep="0.005" gravity="0 0 0"/>
+  <visual>
+    <headlight ambient="0.7 0.7 0.7" diffuse="0.4 0.4 0.4" specular="0.1 0.1 0.1"/>
+    <rgba haze="0.97 0.98 1.0 1"/>
+  </visual>
+  <statistic center="0.000000 1.000000 5.000000" extent="15"/>
+  <asset>
+    <mesh name="green_plaex_long_mesh" file="BlenderFiles/greenPLAEXLong.obj"/>
+  </asset>
+  <worldbody>
+    <light name="key" pos="0 -8 10" dir="0 0 -1" diffuse="0.9 0.9 0.9"/>
+    <camera name="preview" pos="0 -12 6" xyaxes="1 0 0 0 0.6 0.8"/>
+    <geom name="floor" type="box" pos="0 0 -0.1" size="8 8 0.1" rgba="0.85 0.87 0.91 1"/>
+    <body name="PreviewGreenPlaexLongBrick" pos="0.000000 1.000000 5.000000">
+      <geom name="green_plaex_long_geom" type="mesh" mesh="green_plaex_long_mesh" rgba="0.200000 0.620000 0.330000 1.000000"/>
+    </body>
+  </worldbody>
+</mujoco>
