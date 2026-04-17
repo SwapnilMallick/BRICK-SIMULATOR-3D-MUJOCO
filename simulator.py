@@ -28,10 +28,10 @@ class BrickType:
 class InventoryLayout:
     rows: int = 5
     columns: int = 5
-    layers: int = 10
-    gap_x: float = 0.5
-    gap_y: float = 0.5
-    gap_z: float = 0.5
+    layers: int = 1
+    gap_x: float = 0.75
+    gap_y: float = 0.1
+    gap_z: float = 0.75
     corner_inset: float = 1.0
     separation_gap: float = 5.0
 
@@ -46,32 +46,32 @@ class WorldBounds:
     floor_thickness: float = 0.2
 
 
-NORMAL_BRICK = BrickType(
-    group_name="Inventory_NormalBricks",
-    prefix="InventoryBrick_",
-    display_name="normal_brick",
-    size_xyz=(5.0, 2.0, 2.0),
-    rgba=(0.73, 0.73, 0.75, 1.0),
-)
+# NORMAL_BRICK = BrickType(
+#     group_name="Inventory_NormalBricks",
+#     prefix="InventoryBrick_",
+#     display_name="normal_brick",
+#     size_xyz=(5.0, 2.0, 2.0),
+#     rgba=(0.73, 0.73, 0.75, 1.0),
+# )
 
-PROCEDURAL_LEGO_BRICK = BrickType(
-    group_name="Inventory_LegoBricks",
-    prefix="InventoryLegoBrick_",
-    display_name="procedural_lego_brick",
-    size_xyz=(4.0, 0.96, 1.6),
-    rgba=(0.88, 0.15, 0.15, 1.0),
-    add_lego_studs=True,
-)
+# PROCEDURAL_LEGO_BRICK = BrickType(
+#     group_name="Inventory_LegoBricks",
+#     prefix="InventoryLegoBrick_",
+#     display_name="procedural_lego_brick",
+#     size_xyz=(4.0, 0.96, 1.6),
+#     rgba=(0.88, 0.15, 0.15, 1.0),
+#     add_lego_studs=True,
+# )
 
-ORANGE_LEGO_BRICK = BrickType(
-    group_name="Inventory_OrangeLegoBricks",
-    prefix="InventoryOrangeLegoBrick_",
-    display_name="orange_lego_brick",
-    size_xyz=(4.0, 0.96, 1.6),
-    rgba=(0.95, 0.45, 0.12, 1.0),
-    mesh_stem="orangeLEGOBrick",
-    add_lego_studs=True,
-)
+# ORANGE_LEGO_BRICK = BrickType(
+#     group_name="Inventory_OrangeLegoBricks",
+#     prefix="InventoryOrangeLegoBrick_",
+#     display_name="orange_lego_brick",
+#     size_xyz=(4.0, 0.96, 1.6),
+#     rgba=(0.95, 0.45, 0.12, 1.0),
+#     mesh_stem="orangeLEGOBrick",
+#     add_lego_studs=True,
+# )
 
 GREEN_PLAEX_LONG_BRICK = BrickType(
     group_name="Inventory_GreenPlaexLongBricks",
@@ -82,28 +82,28 @@ GREEN_PLAEX_LONG_BRICK = BrickType(
     mesh_stem="greenPLAEXLong", 
 )
 
-ORANGE_PLAEX_LONG_BRICK = BrickType(
-    group_name="Inventory_OrangePlaexLongBricks",
-    prefix="InventoryOrangePlaexLongBrick_",
-    display_name="orange_plaex_long_brick",
-    size_xyz=(5.0, 2.0, 2.0),
-    rgba=(0.91, 0.44, 0.17, 1.0),
-    mesh_stem="orangePLAEXLong",
-)
+#ORANGE_PLAEX_LONG_BRICK = BrickType(
+#    group_name="Inventory_OrangePlaexLongBricks",
+#    prefix="InventoryOrangePlaexLongBrick_",
+#    display_name="orange_plaex_long_brick",
+#    size_xyz=(5.0, 2.0, 2.0),
+#    rgba=(0.91, 0.44, 0.17, 1.0),
+#    mesh_stem="orangePLAEXLong",
+#)
 
-YELLOW_PLAEX_LONG_BRICK = BrickType(
-    group_name="Inventory_YellowPlaexLongBricks",
-    prefix="InventoryYellowPlaexLongBrick_",
-    display_name="yellow_plaex_long_brick",
+A2 = BrickType(
+    group_name="Inventory_A2",
+    prefix="InventoryA2_",
+    display_name="a2_brick",
     size_xyz=(5.0, 2.0, 2.0),
     rgba=(0.93, 0.78, 0.20, 1.0),
     mesh_stem="yellowPLAEXLong",
 )
 
-YELLOW_PLAEX_SIDE_BRICK = BrickType(
-    group_name="Inventory_YellowPlaexSideBricks",
-    prefix="InventoryYellowPlaexSideBrick_",
-    display_name="yellow_plaex_side_brick",
+C2 = BrickType(
+    group_name="Inventory_C2",
+    prefix="InventoryC2_",
+    display_name="c2_brick",
     size_xyz=(2.0, 2.0, 2.0),
     rgba=(0.90, 0.83, 0.22, 1.0),
     mesh_stem="yellowPLAEXSide",
@@ -111,13 +111,13 @@ YELLOW_PLAEX_SIDE_BRICK = BrickType(
 
 
 INVENTORY_ORDER: Sequence[BrickType] = (
-    NORMAL_BRICK,
-    PROCEDURAL_LEGO_BRICK,
-    ORANGE_LEGO_BRICK,
-    GREEN_PLAEX_LONG_BRICK,
-    ORANGE_PLAEX_LONG_BRICK,
-    YELLOW_PLAEX_LONG_BRICK,
-    YELLOW_PLAEX_SIDE_BRICK,
+    # NORMAL_BRICK,
+    # PROCEDURAL_LEGO_BRICK,
+    # ORANGE_LEGO_BRICK,
+    # GREEN_PLAEX_LONG_BRICK,
+    # ORANGE_PLAEX_LONG_BRICK,
+    A2,
+    C2,
 )
 
 ORIGIN_PREVIEW_BRICK = GREEN_PLAEX_LONG_BRICK
@@ -168,8 +168,9 @@ def compute_required_bounds(layout: InventoryLayout) -> WorldBounds:
 def normal_inventory_start(bounds: WorldBounds, layout: InventoryLayout) -> tuple[float, float, float]:
     half_length = bounds.length * 0.5
     half_width = bounds.width * 0.5
-    start_x = bounds.center[0] - half_length + bounds.wall_thickness + (NORMAL_BRICK.size_xyz[0] * 0.5) + layout.corner_inset
-    start_z = bounds.center[2] + half_width - bounds.wall_thickness - (NORMAL_BRICK.size_xyz[2] * 0.5) - layout.corner_inset
+    first_brick = INVENTORY_ORDER[0]
+    start_x = bounds.center[0] - half_length + bounds.wall_thickness + (first_brick.size_xyz[0] * 0.5) + layout.corner_inset
+    start_z = bounds.center[2] + half_width - bounds.wall_thickness - (first_brick.size_xyz[2] * 0.5) - layout.corner_inset
     return (start_x, 0.0, start_z)
 
 
@@ -251,14 +252,16 @@ def lego_stud_positions(size_xyz: tuple[float, float, float]) -> List[tuple[floa
     return studs
 
 
-def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[float, float, float]) -> str:
+def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[float, float, float], static: bool = True) -> str:
     sx, sy, sz = brick_type.size_xyz
     half_extents = unity_to_mujoco_size((sx * 0.5, sy * 0.5, sz * 0.5))
     mesh_path = mujoco_mesh_path_for(brick_type.mesh_stem)
+    euler_attr = ' euler="90 0 0"' if mesh_path is not None else ''
     body_lines = [
-        f'    <body name="{brick_id}" pos="{format_vec(unity_to_mujoco_position(position))}">',
-        '      <freejoint/>',
+        f'    <body name="{brick_id}" pos="{format_vec(unity_to_mujoco_position(position))}"{euler_attr}>',
     ]
+    if not static:
+        body_lines.append('      <freejoint/>')
 
     if mesh_path is not None:
         mesh_name = f"{brick_type.display_name}_mesh"
@@ -284,7 +287,12 @@ def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[f
 
 def build_asset_section() -> str:
     mesh_lines = []
-    for brick_type in INVENTORY_ORDER:
+    seen_stems: set[str] = set()
+    all_brick_types = list(INVENTORY_ORDER) + [ORIGIN_PREVIEW_BRICK]
+    for brick_type in all_brick_types:
+        if brick_type.mesh_stem is None or brick_type.mesh_stem in seen_stems:
+            continue
+        seen_stems.add(brick_type.mesh_stem)
         mesh_path = mujoco_mesh_path_for(brick_type.mesh_stem)
         if mesh_path is None:
             continue
