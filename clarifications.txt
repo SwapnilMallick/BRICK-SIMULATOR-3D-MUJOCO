@@ -1,0 +1,54 @@
+Why are the two bricks in the inventory drifting and the spawned brick at (0, 1, 0) rotatiing instead of staying static?
+
+Problem 1 — All bricks have <freejoint/>
+
+Every brick body (line 262 in simulator.py) unconditionally adds <freejoint/>, which makes them fully free-floating rigid bodies subject to gravity, collision, and torque. A body without any joint in MuJoCo is fixed to the world — but with a freejoint it's completely unconstrained.
+
+Problem 2 — The euler="90 0 0" body-frame rotation + off-center mesh COM
+
+The preview brick (and inventory bricks) get euler="90 0 0" applied to the body frame at spawn. Because they have a freejoint, the physics engine is free to rotate them away from that initial orientation. The mesh's center of mass isn't at the body origin, so gravity produces a net torque and the brick tumbles until it finds a lower-energy pose.
+
+The fix is to add a static flag to build_brick_body_xml. Static bricks (inventory + preview) get no freejoint — they're fixed to the world. Dynamic bricks (future pick-and-place use) can pass static=False.
+
+First attemot at executing a plan (placing a brick at a target location from the inventory):
+
+Modifications Required
+
+1. DSL Parser
+New dataclasses — add PickAction, OrientAction, and PlaceAction to represent parsed instructions.
+
+parse_plan(path: Path) -> list[Action] — reads the .plan file line by line, uses regex to match each command and extract its arguments, and returns an ordered list of actions.
+
+CLI argument — add --plan <file> to parse_args() so the simulator can be invoked with a plan file.
+
+2. Regenerate Scene with the Picked Brick as Dynamic
+MuJoCo's XML is fixed at load time — joints cannot be added or removed at runtime. Therefore:
+
+Modify build_worldbody_xml to accept an optional dynamic_brick_id: str | None parameter. When building each brick body, pass static=False only for the brick whose ID matches the one from pick(...). All other inventory bricks remain static (no <freejoint/>).
+
+Modify main() to re-run scene generation after parsing the plan, so the correct brick gets a <freejoint/> from the start. The brick begins at its inventory position but is now a free-floating dynamic body.
+
+3. Animation in the Viewer Loop
+The picked brick has a <freejoint/>, giving it 7 qpos values (x, y, z, qw, qx, qy, qz) and 6 qvel values.
+
+Pre-compute animation keyframes before entering the viewer loop:
+
+Source: the inventory position of the picked brick (look it up from iter_inventory_positions)
+Target position: from place(x, y, z) (apply Unity→MuJoCo coordinate conversion)
+Target orientation: from orient(a, b, c) converted to a quaternion
+State machine in the loop — drive the brick through phases:
+
+Lift — interpolate upward from inventory position to a clearance height
+Travel — interpolate horizontally to above the target
+Lower — interpolate downward to the final placed position
+Done — freeze in place
+Kinematic control each step — each iteration:
+
+Set data.qpos[joint_qpos_addr : joint_qpos_addr+7] to the interpolated position/quaternion
+Zero out data.qvel[joint_dof_addr : joint_dof_addr+6] so accumulated physics velocity doesn't fight the animation
+Continue calling mujoco.mj_step normally for the rest of the scene
+Utility helpers needed:
+
+euler_to_quat(a, b, c) — convert the DSL Euler angles to a MuJoCo quaternion
+slerp(q0, q1, t) — smooth quaternion interpolation for the orient phase
+lerp(p0, p1, t) — linear interpolation for position
