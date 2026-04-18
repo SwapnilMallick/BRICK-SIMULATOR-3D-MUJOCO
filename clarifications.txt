@@ -10,7 +10,7 @@ The preview brick (and inventory bricks) get euler="90 0 0" applied to the body 
 
 The fix is to add a static flag to build_brick_body_xml. Static bricks (inventory + preview) get no freejoint — they're fixed to the world. Dynamic bricks (future pick-and-place use) can pass static=False.
 
-First attemot at executing a plan (placing a brick at a target location from the inventory):
+First attempt at executing a plan (placing a brick at a target location from the inventory):
 
 Modifications Required
 
@@ -52,3 +52,27 @@ Utility helpers needed:
 euler_to_quat(a, b, c) — convert the DSL Euler angles to a MuJoCo quaternion
 slerp(q0, q1, t) — smooth quaternion interpolation for the orient phase
 lerp(p0, p1, t) — linear interpolation for position
+
+#### Modifications needed to place multiple bricks ####
+
+1. main() — Plan parsing into groups (simulator.py:566-573)
+Currently iterates actions but only retains the last pick/orient/place, silently discarding all but one triplet. Needs to be rewritten to group actions into an ordered list of (PickAction, OrientAction, PlaceAction) triplets.
+
+2. build_worldbody_xml() — Single → multiple dynamic bricks (simulator.py:352 & 401-402)
+Signature: dynamic_brick_id: str | None → dynamic_brick_ids: set[str] | None
+Inner check: is_dynamic = brick_id == dynamic_brick_id → is_dynamic = dynamic_brick_ids and brick_id in dynamic_brick_ids
+3. build_scene_xml() — Propagate the change (simulator.py:408)
+Signature: dynamic_brick_id: Optional[str] → dynamic_brick_ids: Optional[set[str]]
+Pass it through to build_worldbody_xml()
+4. main() — Build XML with ALL picked bricks dynamic (simulator.py:575)
+Collect all brick_ids from each triplet's PickAction
+Pass the full set to build_scene_xml(..., dynamic_brick_ids={...})
+5. Animation state — Single → per-brick list (simulator.py:600-626)
+Currently one set of scalar variables (anim_qpos_addr, src_pos, tgt_pos, base_quat, tgt_quat). Needs to become a list of per-brick state structs (one per triplet), so each brick's qpos address, source position, target position, and quaternions are tracked independently.
+
+6. Animation loop — Sequential execution across bricks (simulator.py:636-661)
+Currently only animates one brick with 3 phases (lift, travel, lower). Needs to:
+
+Compute which brick is currently animating based on elapsed time (3 phases × PHASE_DURATION per brick)
+Hold previously placed bricks at their target position while later bricks animate
+Continue holding all placed bricks once the full sequence is done

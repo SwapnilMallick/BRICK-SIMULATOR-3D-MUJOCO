@@ -1,3 +1,7 @@
 pick("InventoryA2_250")
-orient(0, 0, 0)
-place(0.0, 1.0, 0.0)
+orient(0.0, 0.0, 0.0)
+place(0.0, 0.0, 1.0)
+
+pick("InventoryA2_249")
+orient(0.0, 0.0, 0.0)
+place(0.0, 0.0, 3.0)

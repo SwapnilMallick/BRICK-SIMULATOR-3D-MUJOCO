@@ -33,8 +33,8 @@ class InventoryLayout:
     columns: int = 5
     layers: int = 10
     gap_x: float = 0.75
-    gap_y: float = 0.1
-    gap_z: float = 0.75
+    gap_y: float = 0.75
+    gap_z: float = 0.1
     corner_inset: float = 1.0
     separation_gap: float = 5.0
 
@@ -116,7 +116,7 @@ A1 = BrickType(
     group_name="Inventory_A1",
     prefix="InventoryA1_",
     display_name="a1_brick",
-    size_xyz=(5.0, 1.0, 2.0),
+    size_xyz=(5.0, 2.0, 1.0),
     rgba=(0.85, 0.12, 0.12, 1.0),
     mesh_stem="redPLAEXLong",
 )
@@ -125,7 +125,7 @@ C1 = BrickType(
     group_name="Inventory_C1",
     prefix="InventoryC1_",
     display_name="c1_brick",
-    size_xyz=(2.0, 1.0, 2.0),
+    size_xyz=(2.0, 2.0, 1.0),
     rgba=(0.85, 0.12, 0.12, 1.0),
     mesh_stem="redPLAEXSide",
 )
@@ -182,11 +182,11 @@ def compute_required_bounds(layout: InventoryLayout) -> WorldBounds:
     base = WorldBounds()
 
     widths_x = []
-    depths_z = []
+    depths_y = []
     for brick_type in INVENTORY_ORDER:
-        sx, _, sz = brick_type.size_xyz
+        sx, sy, _ = brick_type.size_xyz
         widths_x.append((layout.columns * sx) + ((layout.columns - 1) * layout.gap_x))
-        depths_z.append((layout.rows * sz) + ((layout.rows - 1) * layout.gap_z))
+        depths_y.append((layout.rows * sy) + ((layout.rows - 1) * layout.gap_y))
 
     required_length = (
         sum(widths_x)
@@ -194,7 +194,7 @@ def compute_required_bounds(layout: InventoryLayout) -> WorldBounds:
         + (2.0 * base.wall_thickness)
         + (2.0 * layout.corner_inset)
     )
-    required_width = max(depths_z) + (2.0 * base.wall_thickness) + (2.0 * layout.corner_inset)
+    required_width = max(depths_y) + (2.0 * base.wall_thickness) + (2.0 * layout.corner_inset)
 
     return WorldBounds(
         center=base.center,
@@ -211,8 +211,8 @@ def normal_inventory_start(bounds: WorldBounds, layout: InventoryLayout) -> tupl
     half_width = bounds.width * 0.5
     first_brick = INVENTORY_ORDER[0]
     start_x = bounds.center[0] - half_length + bounds.wall_thickness + (first_brick.size_xyz[0] * 0.5) + layout.corner_inset
-    start_z = bounds.center[2] + half_width - bounds.wall_thickness - (first_brick.size_xyz[2] * 0.5) - layout.corner_inset
-    return (start_x, 0.0, start_z)
+    start_y = bounds.center[1] + half_width - bounds.wall_thickness - (first_brick.size_xyz[1] * 0.5) - layout.corner_inset
+    return (start_x, start_y, 0.0)
 
 
 def inventory_start_x(
@@ -248,9 +248,9 @@ def iter_inventory_positions(
     layout: InventoryLayout,
 ) -> Iterable[tuple[int, tuple[float, float, float]]]:
     start_x = inventory_start_x(brick_type, INVENTORY_ORDER, bounds, layout)
-    _, _, start_z = normal_inventory_start(bounds, layout)
+    _, start_y, _ = normal_inventory_start(bounds, layout)
     sx, sy, sz = brick_type.size_xyz
-    base_y = bounds.center[1] + (sy * 0.5)
+    base_z = bounds.center[2] + (sz * 0.5)
     step_x = sx + layout.gap_x
     step_y = sy + layout.gap_y
     step_z = sz + layout.gap_z
@@ -259,8 +259,8 @@ def iter_inventory_positions(
         for row in range(layout.rows):
             for col in range(layout.columns):
                 x = start_x + (col * step_x)
-                y = base_y + (layer * step_y)
-                z = start_z - (row * step_z)
+                y = start_y - (row * step_y)
+                z = base_z + (layer * step_z)
                 brick_index = (layer * layout.rows * layout.columns) + (row * layout.columns) + col + 1
                 yield brick_index, (x, y, z)
 
@@ -269,37 +269,27 @@ def format_vec(values: Sequence[float]) -> str:
     return " ".join(f"{value:.6f}" for value in values)
 
 
-def unity_to_mujoco_position(position: Sequence[float]) -> tuple[float, float, float]:
-    # Unity layout data in this project is Y-up; MuJoCo is Z-up.
-    x, y, z = position
-    return (x, z, y)
-
-
-def unity_to_mujoco_size(size: Sequence[float]) -> tuple[float, float, float]:
-    x, y, z = size
-    return (x, z, y)
-
 
 def lego_stud_positions(size_xyz: tuple[float, float, float]) -> List[tuple[float, float, float]]:
     stud_pitch = 0.8
     stud_height = 0.18
-    top_y = (size_xyz[1] * 0.5) + (stud_height * 0.5)
+    top_z = (size_xyz[2] * 0.5) + (stud_height * 0.5)
     start_x = -((5 - 1) * stud_pitch) * 0.5
-    start_z = -((2 - 1) * stud_pitch) * 0.5
+    start_y = -((2 - 1) * stud_pitch) * 0.5
     studs = []
     for x_index in range(5):
-        for z_index in range(2):
-            studs.append((start_x + (x_index * stud_pitch), top_y, start_z + (z_index * stud_pitch)))
+        for y_index in range(2):
+            studs.append((start_x + (x_index * stud_pitch), start_y + (y_index * stud_pitch), top_z))
     return studs
 
 
 def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[float, float, float], static: bool = True) -> str:
     sx, sy, sz = brick_type.size_xyz
-    half_extents = unity_to_mujoco_size((sx * 0.5, sy * 0.5, sz * 0.5))
+    half_extents = (sx * 0.5, sy * 0.5, sz * 0.5)
     mesh_path = mujoco_mesh_path_for(brick_type.mesh_stem)
     euler_attr = ' euler="90 0 0"' if mesh_path is not None else ''
     body_lines = [
-        f'    <body name="{brick_id}" pos="{format_vec(unity_to_mujoco_position(position))}"{euler_attr}>',
+        f'    <body name="{brick_id}" pos="{format_vec(position)}"{euler_attr}>',
     ]
     if not static:
         body_lines.append('      <freejoint/>')
@@ -318,7 +308,7 @@ def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[f
             stud_half_height = 0.09
             for stud_index, stud_pos in enumerate(lego_stud_positions(brick_type.size_xyz), start=1):
                 body_lines.append(
-                    f'      <geom name="{brick_id}_stud_{stud_index}" type="cylinder" pos="{format_vec(unity_to_mujoco_position(stud_pos))}" '
+                    f'      <geom name="{brick_id}_stud_{stud_index}" type="cylinder" pos="{format_vec(stud_pos)}" '
                     f'size="{stud_radius:.6f} {stud_half_height:.6f}" rgba="{format_vec(brick_type.rgba)}" mass="0.02"/>'
                 )
 
@@ -349,13 +339,14 @@ def build_asset_section() -> str:
     return "  <asset>\n" + "\n".join(mesh_lines) + "\n  </asset>\n"
 
 
-def build_worldbody_xml(bounds: WorldBounds, layout: InventoryLayout, dynamic_brick_id: str | None = None) -> str:
+def build_worldbody_xml(bounds: WorldBounds, layout: InventoryLayout, dynamic_brick_ids: set[str] | None = None) -> str:
+    cx, cy, cz = bounds.center
     half_length = bounds.length * 0.5
     half_width = bounds.width * 0.5
-    wall_center_y = bounds.center[1] + (bounds.wall_height * 0.5)
-    floor_half_extents = unity_to_mujoco_size((half_length, bounds.floor_thickness * 0.5, half_width))
-    side_wall_half_extents = unity_to_mujoco_size((bounds.wall_thickness * 0.5, bounds.wall_height * 0.5, half_width))
-    front_back_wall_half_extents = unity_to_mujoco_size((half_length, bounds.wall_height * 0.5, bounds.wall_thickness * 0.5))
+    wall_center_z = cz + (bounds.wall_height * 0.5)
+    floor_half_extents = (half_length, half_width, bounds.floor_thickness * 0.5)
+    side_wall_half_extents = (bounds.wall_thickness * 0.5, half_width, bounds.wall_height * 0.5)
+    front_back_wall_half_extents = (half_length, bounds.wall_thickness * 0.5, bounds.wall_height * 0.5)
 
     lines = [
         "  <worldbody>",
@@ -364,31 +355,31 @@ def build_worldbody_xml(bounds: WorldBounds, layout: InventoryLayout, dynamic_br
         '    <camera name="overview" pos="0 -160 120" xyaxes="1 0 0 0 0.6 0.8"/>',
         (
             '    <geom name="floor" type="box" '
-            f'pos="{format_vec(unity_to_mujoco_position((bounds.center[0], bounds.center[1] - (bounds.floor_thickness * 0.5), bounds.center[2])))}" '
+            f'pos="{format_vec((cx, cy, cz - (bounds.floor_thickness * 0.5)))}" '
             f'size="{format_vec(floor_half_extents)}" '
             'rgba="0.82 0.84 0.88 1"/>'
         ),
         (
             '    <geom name="wall_left" type="box" '
-            f'pos="{format_vec(unity_to_mujoco_position((bounds.center[0] - half_length + (bounds.wall_thickness * 0.5), wall_center_y, bounds.center[2])))}" '
+            f'pos="{format_vec((cx - half_length + (bounds.wall_thickness * 0.5), cy, wall_center_z))}" '
             f'size="{format_vec(side_wall_half_extents)}" '
             'rgba="0.2 0.2 0.2 0.02"/>'
         ),
         (
             '    <geom name="wall_right" type="box" '
-            f'pos="{format_vec(unity_to_mujoco_position((bounds.center[0] + half_length - (bounds.wall_thickness * 0.5), wall_center_y, bounds.center[2])))}" '
+            f'pos="{format_vec((cx + half_length - (bounds.wall_thickness * 0.5), cy, wall_center_z))}" '
             f'size="{format_vec(side_wall_half_extents)}" '
             'rgba="0.2 0.2 0.2 0.02"/>'
         ),
         (
             '    <geom name="wall_front" type="box" '
-            f'pos="{format_vec(unity_to_mujoco_position((bounds.center[0], wall_center_y, bounds.center[2] + half_width - (bounds.wall_thickness * 0.5))))}" '
+            f'pos="{format_vec((cx, cy + half_width - (bounds.wall_thickness * 0.5), wall_center_z))}" '
             f'size="{format_vec(front_back_wall_half_extents)}" '
             'rgba="0.2 0.2 0.2 0.02"/>'
         ),
         (
             '    <geom name="wall_back" type="box" '
-            f'pos="{format_vec(unity_to_mujoco_position((bounds.center[0], wall_center_y, bounds.center[2] - half_width + (bounds.wall_thickness * 0.5))))}" '
+            f'pos="{format_vec((cx, cy - half_width + (bounds.wall_thickness * 0.5), wall_center_z))}" '
             f'size="{format_vec(front_back_wall_half_extents)}" '
             'rgba="0.2 0.2 0.2 0.02"/>'
         ),
@@ -398,16 +389,16 @@ def build_worldbody_xml(bounds: WorldBounds, layout: InventoryLayout, dynamic_br
     for brick_type in INVENTORY_ORDER:
         for brick_index, position in iter_inventory_positions(brick_type, bounds, layout):
             brick_id = f"{brick_type.prefix}{brick_index}"
-            is_dynamic = brick_id == dynamic_brick_id
+            is_dynamic = dynamic_brick_ids is not None and brick_id in dynamic_brick_ids
             lines.append(build_brick_body_xml(brick_type, brick_id, position, static=not is_dynamic))
 
     lines.append("  </worldbody>")
     return "\n".join(lines) + "\n"
 
 
-def build_scene_xml(bounds: WorldBounds, layout: InventoryLayout, dynamic_brick_id: Optional[str] = None) -> str:
+def build_scene_xml(bounds: WorldBounds, layout: InventoryLayout, dynamic_brick_ids: Optional[set[str]] = None) -> str:
     asset_xml = build_asset_section()
-    worldbody_xml = build_worldbody_xml(bounds, layout, dynamic_brick_id)
+    worldbody_xml = build_worldbody_xml(bounds, layout, dynamic_brick_ids)
     xml = f"""<mujoco model="lego_planning_learning_inventory">
   <compiler angle="degree" coordinate="local" autolimits="true"/>
   <option timestep="0.005" gravity="0 0 -9.81" integrator="implicitfast"/>
@@ -415,7 +406,7 @@ def build_scene_xml(bounds: WorldBounds, layout: InventoryLayout, dynamic_brick_
     <headlight ambient="0.65 0.65 0.65" diffuse="0.45 0.45 0.45" specular="0.1 0.1 0.1"/>
     <rgba haze="0.97 0.98 1.0 1"/>
   </visual>
-  <statistic center="{format_vec(unity_to_mujoco_position(bounds.center))}" extent="{max(bounds.length, bounds.width):.6f}"/>
+  <statistic center="{format_vec(bounds.center)}" extent="{max(bounds.length, bounds.width):.6f}"/>
 {asset_xml}  <default>
     <geom solref="0.004 1" solimp="0.95 0.99 0.001" friction="0.9 0.1 0.05" condim="3"/>
     <joint damping="1" armature="0.01"/>
@@ -448,9 +439,9 @@ def find_inventory_position(
 ) -> Optional[Tuple[float, float, float]]:
     """Return the MuJoCo-space position of a brick in the inventory, or None if not found."""
     for brick_type in INVENTORY_ORDER:
-        for brick_index, pos_unity in iter_inventory_positions(brick_type, bounds, layout):
+        for brick_index, pos in iter_inventory_positions(brick_type, bounds, layout):
             if f"{brick_type.prefix}{brick_index}" == brick_id:
-                return unity_to_mujoco_position(pos_unity)
+                return pos
     return None
 
 
@@ -558,21 +549,30 @@ def main() -> None:
     layout = InventoryLayout()
     bounds = compute_required_bounds(layout)
 
-    # --- Parse plan ---
-    dynamic_brick_id: Optional[str] = None
-    orient_action: Optional[OrientAction] = None
-    place_action: Optional[PlaceAction] = None
+    # --- Parse plan into ordered triplets: (pick, orient, place) ---
+    # Each triplet groups the actions for one brick in sequence.
+    triplets: List[Tuple[PickAction, Optional[OrientAction], Optional[PlaceAction]]] = []
 
     if args.plan is not None:
+        current_pick: Optional[PickAction] = None
+        current_orient: Optional[OrientAction] = None
         for action in parse_plan(args.plan):
             if isinstance(action, PickAction):
-                dynamic_brick_id = action.brick_id
+                current_pick = action
+                current_orient = None
             elif isinstance(action, OrientAction):
-                orient_action = action
+                current_orient = action
             elif isinstance(action, PlaceAction):
-                place_action = action
+                if current_pick is not None:
+                    triplets.append((current_pick, current_orient, action))
+                    current_pick = None
+                    current_orient = None
 
-    xml = build_scene_xml(bounds, layout, dynamic_brick_id)
+    dynamic_brick_ids: Optional[set[str]] = (
+        {t[0].brick_id for t in triplets} if triplets else None
+    )
+
+    xml = build_scene_xml(bounds, layout, dynamic_brick_ids)
     xml_path = write_scene_file(xml)
 
     model = mujoco.MjModel.from_xml_string(xml)
@@ -594,36 +594,47 @@ def main() -> None:
         raise RuntimeError("mujoco.viewer is unavailable in this Python environment.") from exc
 
     # --- Animation setup ---
-    PHASE_DURATION = 4.0     # wall-clock seconds per animation phase
+    # Each entry holds per-brick animation state for sequential playback.
+    PHASE_DURATION = 4.0     # wall-clock seconds per animation phase (3 phases per brick)
+    PHASES_PER_BRICK = 3     # lift, travel, lower
     LIFT_CLEARANCE = 15.0    # MuJoCo units to lift above inventory before travelling
 
-    anim_qpos_addr: Optional[int] = None
-    anim_dof_addr: Optional[int] = None
-    src_pos: Optional[Tuple[float, float, float]] = None
-    tgt_pos: Optional[Tuple[float, float, float]] = None
-    base_quat: Tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
-    tgt_quat: Tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+    @dataclass
+    class BrickAnimState:
+        qpos_addr: int
+        dof_addr: int
+        src_pos: Tuple[float, float, float]
+        tgt_pos: Tuple[float, float, float]
+        base_quat: Tuple[float, float, float, float]
+        tgt_quat: Tuple[float, float, float, float]
 
-    if dynamic_brick_id is not None and place_action is not None:
-        body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, dynamic_brick_id)
-        if body_id >= 0:
-            jnt_id = model.body_jntadr[body_id]
-            anim_qpos_addr = int(model.jnt_qposadr[jnt_id])
-            anim_dof_addr = int(model.jnt_dofadr[jnt_id])
-            # Read the quaternion MuJoCo initialised from the XML euler attribute.
-            # This captures the mesh-correction rotation (e.g. euler="90 0 0") so
-            # the brick's studs stay upright throughout the animation.
-            q = data.qpos[anim_qpos_addr + 3:anim_qpos_addr + 7]
-            base_quat = (float(q[0]), float(q[1]), float(q[2]), float(q[3]))
+    anim_bricks: List[BrickAnimState] = []
 
-        src_pos = find_inventory_position(dynamic_brick_id, bounds, layout)
-        tgt_pos = unity_to_mujoco_position((place_action.x, place_action.y, place_action.z))
-
+    for pick_action, orient_action, place_action in triplets:
+        if place_action is None:
+            continue
+        brick_id = pick_action.brick_id
+        body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, brick_id)
+        if body_id < 0:
+            continue
+        jnt_id = model.body_jntadr[body_id]
+        qpos_addr = int(model.jnt_qposadr[jnt_id])
+        dof_addr = int(model.jnt_dofadr[jnt_id])
+        # Read the quaternion MuJoCo initialised from the XML euler attribute.
+        # This captures the mesh-correction rotation (e.g. euler="90 0 0") so
+        # the brick's studs stay upright throughout the animation.
+        q = data.qpos[qpos_addr + 3:qpos_addr + 7]
+        base_quat: Tuple[float, float, float, float] = (float(q[0]), float(q[1]), float(q[2]), float(q[3]))
+        src_pos = find_inventory_position(brick_id, bounds, layout)
+        if src_pos is None:
+            continue
+        tgt_pos = (place_action.x, place_action.y, place_action.z)
         # Compose the user's orient on top of the base rotation so that
         # orient(0, 0, 0) means "natural upright orientation, no extra rotation".
         user_quat = euler_to_quat(orient_action.a, orient_action.b, orient_action.c) \
             if orient_action is not None else (1.0, 0.0, 0.0, 0.0)
         tgt_quat = quat_multiply(base_quat, user_quat)
+        anim_bricks.append(BrickAnimState(qpos_addr, dof_addr, src_pos, tgt_pos, base_quat, tgt_quat))
 
     with mj_viewer.launch_passive(model, data) as viewer:
         viewer.cam.lookat[:] = bounds.center
@@ -634,31 +645,46 @@ def main() -> None:
         anim_start = time.time()
 
         while viewer.is_running():
-            # Kinematic animation: override qpos/qvel for the picked brick each step
-            if anim_qpos_addr is not None and src_pos is not None and tgt_pos is not None:
+            if anim_bricks:
                 elapsed = time.time() - anim_start
-                phase = int(elapsed // PHASE_DURATION)
+                # Which brick is currently animating, and which phase within it
+                global_phase = int(elapsed // PHASE_DURATION)
+                brick_idx = global_phase // PHASES_PER_BRICK
+                local_phase = global_phase % PHASES_PER_BRICK
                 t = min((elapsed % PHASE_DURATION) / PHASE_DURATION, 1.0)
 
-                lift_src: Tuple[float, float, float] = (src_pos[0], src_pos[1], src_pos[2] + LIFT_CLEARANCE)
-                lift_tgt: Tuple[float, float, float] = (tgt_pos[0], tgt_pos[1], tgt_pos[2] + LIFT_CLEARANCE)
+                # Hold all already-placed bricks at their target positions
+                for i, bk in enumerate(anim_bricks):
+                    if i < brick_idx:
+                        data.qpos[bk.qpos_addr:bk.qpos_addr + 3] = bk.tgt_pos
+                        data.qpos[bk.qpos_addr + 3:bk.qpos_addr + 7] = bk.tgt_quat
+                        data.qvel[bk.dof_addr:bk.dof_addr + 6] = 0.0
 
-                if phase == 0:    # lift straight up from inventory
-                    pos = lerp(src_pos, lift_src, t)
-                    quat = slerp(base_quat, tgt_quat, t)
-                elif phase == 1:  # travel horizontally to above target
-                    pos = lerp(lift_src, lift_tgt, t)
-                    quat = tgt_quat
-                elif phase == 2:  # lower onto target
-                    pos = lerp(lift_tgt, tgt_pos, t)
-                    quat = tgt_quat
-                else:             # done — hold in place
-                    pos = tgt_pos
-                    quat = tgt_quat
+                # Animate the current brick
+                if brick_idx < len(anim_bricks):
+                    bk = anim_bricks[brick_idx]
+                    lift_src: Tuple[float, float, float] = (bk.src_pos[0], bk.src_pos[1], bk.src_pos[2] + LIFT_CLEARANCE)
+                    lift_tgt: Tuple[float, float, float] = (bk.tgt_pos[0], bk.tgt_pos[1], bk.tgt_pos[2] + LIFT_CLEARANCE)
 
-                data.qpos[anim_qpos_addr:anim_qpos_addr + 3] = pos
-                data.qpos[anim_qpos_addr + 3:anim_qpos_addr + 7] = quat
-                data.qvel[anim_dof_addr:anim_dof_addr + 6] = 0.0
+                    if local_phase == 0:    # lift straight up from inventory
+                        pos = lerp(bk.src_pos, lift_src, t)
+                        quat = slerp(bk.base_quat, bk.tgt_quat, t)
+                    elif local_phase == 1:  # travel horizontally to above target
+                        pos = lerp(lift_src, lift_tgt, t)
+                        quat = bk.tgt_quat
+                    else:                   # lower onto target
+                        pos = lerp(lift_tgt, bk.tgt_pos, t)
+                        quat = bk.tgt_quat
+
+                    data.qpos[bk.qpos_addr:bk.qpos_addr + 3] = pos
+                    data.qpos[bk.qpos_addr + 3:bk.qpos_addr + 7] = quat
+                    data.qvel[bk.dof_addr:bk.dof_addr + 6] = 0.0
+                else:
+                    # All bricks placed — hold the last one in position
+                    bk = anim_bricks[-1]
+                    data.qpos[bk.qpos_addr:bk.qpos_addr + 3] = bk.tgt_pos
+                    data.qpos[bk.qpos_addr + 3:bk.qpos_addr + 7] = bk.tgt_quat
+                    data.qvel[bk.dof_addr:bk.dof_addr + 6] = 0.0
 
             mujoco.mj_step(model, data)
             viewer.sync()
