@@ -393,7 +393,11 @@ def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[f
         #     (= world-Z after the body rotation).  MuJoCo cylinders default to
         #     the geom-local Z axis, so euler="-90 0 0" on the geom rotates that
         #     local Z onto OBJ-Y:  Rx(-90°) maps (0,0,1) → (0,1,0).
-        #     Stud OBJ-Y centre = half body height + half stud height. ---
+        #     Stud OBJ-Y centre = half body height + half stud height.
+        #     contype=2/conaffinity=2: studs only collide with tube receiver
+        #     pillars (also contype=2), not with the body box (contype=1) of
+        #     the brick above.  This lets the stud pass through the solid body
+        #     box and engage with the tube geometry instead of sitting on top. ---
         if brick_type.stud_geom_xz and brick_type.stud_radius > 0.0:
             stud_center_y = half_by + brick_type.stud_height * 0.5
             stud_half_h   = brick_type.stud_height * 0.5
@@ -403,7 +407,55 @@ def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[f
                     f' pos="{s_x:.6f} {stud_center_y:.6f} {s_z:.6f}"'
                     f' euler="-90 0 0"'
                     f' size="{brick_type.stud_radius:.6f} {stud_half_h:.6f}"'
-                    f' rgba="0 0 0 0" mass="0.05"/>'
+                    f' rgba="0 0 0 0" mass="0.05"'
+                    f' contype="2" conaffinity="2"/>'
+                )
+
+            # --- Tube receiver pillars.
+            #     Four box pillars per stud position on the UNDERSIDE of this
+            #     brick, at OBJ-Y = -(half_by - stud_half_h).  They form the
+            #     cylindrical tube wall that captures the stud of the brick below.
+            #     contype=2/conaffinity=2: only interact with stud cylinders,
+            #     not with body boxes, so they don't add unwanted contacts when
+            #     bricks rest on the floor or side-by-side.
+            #     Axes (body has euler="90 0 0"):
+            #       OBJ-X = world X,  OBJ-Y = world Z,  OBJ-Z = world -Y.
+            #     The four pillars are placed at ±pillar_offset in OBJ-X and
+            #     ±pillar_offset in OBJ-Z, surrounding the tube centre. ---
+            tube_center_y = -(half_by - stud_half_h)
+            inner_r       = brick_type.stud_radius + 0.05   # clearance between stud and pillar
+            pillar_r      = 0.15                             # radial half-thickness of each pillar
+            pillar_offset = inner_r + pillar_r               # distance from tube axis to pillar centre
+            tang_half     = inner_r * 0.85                   # tangential half-length
+
+            for s_idx, (s_x, s_z) in enumerate(brick_type.stud_geom_xz, start=1):
+                # +OBJ-X pillar (constrains world +X lateral motion)
+                body_lines.append(
+                    f'      <geom name="{brick_id}_tube_{s_idx}_1" type="box"'
+                    f' pos="{s_x + pillar_offset:.6f} {tube_center_y:.6f} {s_z:.6f}"'
+                    f' size="{pillar_r:.6f} {stud_half_h:.6f} {tang_half:.6f}"'
+                    f' rgba="0 0 0 0" mass="0" contype="2" conaffinity="2"/>'
+                )
+                # −OBJ-X pillar (constrains world −X lateral motion)
+                body_lines.append(
+                    f'      <geom name="{brick_id}_tube_{s_idx}_2" type="box"'
+                    f' pos="{s_x - pillar_offset:.6f} {tube_center_y:.6f} {s_z:.6f}"'
+                    f' size="{pillar_r:.6f} {stud_half_h:.6f} {tang_half:.6f}"'
+                    f' rgba="0 0 0 0" mass="0" contype="2" conaffinity="2"/>'
+                )
+                # +OBJ-Z pillar (constrains world −Y lateral motion)
+                body_lines.append(
+                    f'      <geom name="{brick_id}_tube_{s_idx}_3" type="box"'
+                    f' pos="{s_x:.6f} {tube_center_y:.6f} {s_z + pillar_offset:.6f}"'
+                    f' size="{tang_half:.6f} {stud_half_h:.6f} {pillar_r:.6f}"'
+                    f' rgba="0 0 0 0" mass="0" contype="2" conaffinity="2"/>'
+                )
+                # −OBJ-Z pillar (constrains world +Y lateral motion)
+                body_lines.append(
+                    f'      <geom name="{brick_id}_tube_{s_idx}_4" type="box"'
+                    f' pos="{s_x:.6f} {tube_center_y:.6f} {s_z - pillar_offset:.6f}"'
+                    f' size="{tang_half:.6f} {stud_half_h:.6f} {pillar_r:.6f}"'
+                    f' rgba="0 0 0 0" mass="0" contype="2" conaffinity="2"/>'
                 )
 
         # --- Tab collision boxes (bounding-box approximation of trapezoidal tabs).
