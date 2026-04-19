@@ -8,9 +8,11 @@ from typing import List, Optional, Tuple
 import mujoco
 
 
-PHASE_DURATION = 1.0    # wall-clock seconds per animation phase (3 phases per brick)
-PHASES_PER_BRICK = 3    # lift, travel, lower
-LIFT_CLEARANCE = 15.0   # MuJoCo units to lift above inventory before travelling
+PHASE_DURATION = 1.2      # wall-clock seconds per animation phase
+PHASES_PER_BRICK = 3      # arc-to-above-target → lower-to-release → physics settle
+LIFT_CLEARANCE = 15.0     # MuJoCo units above the higher of src/tgt during arc
+RELEASE_CLEARANCE = 1.0   # MuJoCo units above tgt_pos to stop kinematic drive
+                           # and hand the brick over to physics
 
 
 @dataclass
@@ -63,6 +65,27 @@ def slerp(
     s0 = math.cos(theta) - dot * math.sin(theta) / math.sin(theta_0)
     s1 = math.sin(theta) / math.sin(theta_0)
     return tuple(s0 * a + s1 * b for a, b in zip(q0, q1))  # type: ignore[return-value]
+
+
+def smoothstep(t: float) -> float:
+    """Smooth ease-in / ease-out: zero first-derivative at t=0 and t=1."""
+    t = max(0.0, min(1.0, t))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def bezier3(
+    p0: Tuple[float, float, float],
+    p1: Tuple[float, float, float],
+    p2: Tuple[float, float, float],
+    t: float,
+) -> Tuple[float, float, float]:
+    """Quadratic Bezier: P(t) = (1-t)²·P0 + 2(1-t)t·P1 + t²·P2."""
+    mt = 1.0 - t
+    return (
+        mt * mt * p0[0] + 2.0 * mt * t * p1[0] + t * t * p2[0],
+        mt * mt * p0[1] + 2.0 * mt * t * p1[1] + t * t * p2[1],
+        mt * mt * p0[2] + 2.0 * mt * t * p1[2] + t * t * p2[2],
+    )
 
 
 def quat_multiply(
@@ -152,44 +175,74 @@ def run_viewer(
         while viewer.is_running():
             if anim_bricks:
                 elapsed = time.time() - anim_start
-                # Which brick is currently animating, and which phase within it
+                # Which brick is currently animating, and which phase within it.
                 global_phase = int(elapsed // PHASE_DURATION)
-                brick_idx = global_phase // PHASES_PER_BRICK
+                brick_idx   = global_phase // PHASES_PER_BRICK
                 local_phase = global_phase % PHASES_PER_BRICK
                 t = min((elapsed % PHASE_DURATION) / PHASE_DURATION, 1.0)
 
-                # Hold all already-placed bricks at their target positions
-                for i, bk in enumerate(anim_bricks):
-                    if i < brick_idx:
-                        data.qpos[bk.qpos_addr:bk.qpos_addr + 3] = bk.tgt_pos
-                        data.qpos[bk.qpos_addr + 3:bk.qpos_addr + 7] = bk.tgt_quat
-                        data.qvel[bk.dof_addr:bk.dof_addr + 6] = 0.0
+                # Previously placed bricks (index < brick_idx) are fully
+                # released to physics — we no longer override their qpos/qvel.
+                # MuJoCo's contact solver keeps them resting wherever they
+                # landed (on the floor, on studs, or toppled if misaligned).
 
-                # Animate the current brick
+                # Animate the current brick kinematically (phases 0–1) or let
+                # it settle under gravity (phase 2).
                 if brick_idx < len(anim_bricks):
                     bk = anim_bricks[brick_idx]
-                    lift_src: Tuple[float, float, float] = (bk.src_pos[0], bk.src_pos[1], bk.src_pos[2] + LIFT_CLEARANCE)
-                    lift_tgt: Tuple[float, float, float] = (bk.tgt_pos[0], bk.tgt_pos[1], bk.tgt_pos[2] + LIFT_CLEARANCE)
 
-                    if local_phase == 0:    # lift straight up from inventory
-                        pos = lerp(bk.src_pos, lift_src, t)
-                        quat = slerp(bk.base_quat, bk.tgt_quat, t)
-                    elif local_phase == 1:  # travel horizontally to above target
-                        pos = lerp(lift_src, lift_tgt, t)
-                        quat = bk.tgt_quat
-                    else:                   # lower onto target
-                        pos = lerp(lift_tgt, bk.tgt_pos, t)
-                        quat = bk.tgt_quat
+                    # Apex of the arc: above whichever end-point is higher, so
+                    # the brick never dips below either during transit.
+                    arc_peak_z = max(bk.src_pos[2], bk.tgt_pos[2]) + LIFT_CLEARANCE
+                    arc_ctrl: Tuple[float, float, float] = (
+                        (bk.src_pos[0] + bk.tgt_pos[0]) * 0.5,
+                        (bk.src_pos[1] + bk.tgt_pos[1]) * 0.5,
+                        arc_peak_z,
+                    )
+                    # Where the arc ends: directly above the target at the same
+                    # lift height, so phase 1 only has to descend vertically.
+                    lift_tgt: Tuple[float, float, float] = (
+                        bk.tgt_pos[0], bk.tgt_pos[1], arc_peak_z)
+                    # Stop kinematic drive at RELEASE_CLEARANCE above the plan
+                    # target, then hand off to physics.  This lets the brick
+                    # fall onto whatever geometry is below it (floor, stud tops,
+                    # or the side of a misaligned brick) so that contacts and
+                    # resulting torques are resolved naturally.
+                    release_pos: Tuple[float, float, float] = (
+                        bk.tgt_pos[0], bk.tgt_pos[1], bk.tgt_pos[2] + RELEASE_CLEARANCE)
 
-                    data.qpos[bk.qpos_addr:bk.qpos_addr + 3] = pos
-                    data.qpos[bk.qpos_addr + 3:bk.qpos_addr + 7] = quat
-                    data.qvel[bk.dof_addr:bk.dof_addr + 6] = 0.0
-                else:
-                    # All bricks placed — hold the last one in position
-                    bk = anim_bricks[-1]
-                    data.qpos[bk.qpos_addr:bk.qpos_addr + 3] = bk.tgt_pos
-                    data.qpos[bk.qpos_addr + 3:bk.qpos_addr + 7] = bk.tgt_quat
-                    data.qvel[bk.dof_addr:bk.dof_addr + 6] = 0.0
+                    if local_phase == 0:
+                        # Quadratic Bezier arc: src → ctrl (apex) → lift_tgt.
+                        # The brick lifts, sweeps across, and arrives directly
+                        # above the target in one smooth curved motion.
+                        # Orientation is eased in during this phase so it
+                        # arrives aligned before the final descent.
+                        t_s = smoothstep(t)
+                        pos  = bezier3(bk.src_pos, arc_ctrl, lift_tgt, t_s)
+                        quat = slerp(bk.base_quat, bk.tgt_quat, t_s)
+                        data.qpos[bk.qpos_addr:bk.qpos_addr + 3]     = pos
+                        data.qpos[bk.qpos_addr + 3:bk.qpos_addr + 7] = quat
+                        data.qvel[bk.dof_addr:bk.dof_addr + 6]       = 0.0
+                    elif local_phase == 1:
+                        # Ease down from lift height to release clearance.
+                        # Smoothstep gives a gentle deceleration so the brick
+                        # arrives nearly stationary before physics takes over.
+                        t_s = smoothstep(t)
+                        pos = lerp(lift_tgt, release_pos, t_s)
+                        data.qpos[bk.qpos_addr:bk.qpos_addr + 3]     = pos
+                        data.qpos[bk.qpos_addr + 3:bk.qpos_addr + 7] = bk.tgt_quat
+                        data.qvel[bk.dof_addr:bk.dof_addr + 6]       = 0.0
+                    # local_phase == 2: physics settle — no kinematic override.
+                    # The brick was left at release_pos with zero velocity at the
+                    # end of phase 1; gravity + contacts determine the outcome.
+
+                # Freeze every brick that hasn't started animating yet.
+                # All plan bricks have a freejoint, so without this they would
+                # fall off the shelf under gravity before their turn arrives.
+                for future_bk in anim_bricks[brick_idx + 1:]:
+                    data.qpos[future_bk.qpos_addr:future_bk.qpos_addr + 3]     = future_bk.src_pos
+                    data.qpos[future_bk.qpos_addr + 3:future_bk.qpos_addr + 7] = future_bk.base_quat
+                    data.qvel[future_bk.dof_addr:future_bk.dof_addr + 6]        = 0.0
 
             mujoco.mj_step(model, data)
             viewer.sync()

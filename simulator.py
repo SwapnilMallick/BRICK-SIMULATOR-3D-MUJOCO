@@ -25,6 +25,20 @@ class BrickType:
     rgba: tuple[float, float, float, float]
     mesh_stem: str | None = None
     add_lego_studs: bool = False
+    # Stud collision geometry (in OBJ/body-local space).
+    # Each entry is (OBJ-x, OBJ-z) for one stud; OBJ-y is computed from
+    # size_xyz and stud_height at build time.
+    # OBJ axes: OBJ-X = Blender X, OBJ-Y = Blender Z (up), OBJ-Z = -Blender Y.
+    stud_geom_xz: tuple[tuple[float, float], ...] = ()
+    stud_radius: float = 0.0
+    stud_height: float = 0.0
+    # Tab collision geometry (in OBJ/body-local space).
+    # Each entry is (pos_x, pos_y, pos_z, half_x, half_y, half_z).
+    # Tabs are trapezoidal prisms protruding from the body faces; they are
+    # approximated here with bounding-box boxes so MuJoCo can prevent
+    # tabs from passing through each other or through neighbouring bodies.
+    # OBJ axes: OBJ-X = Blender X, OBJ-Y = Blender Z (up), OBJ-Z = -Blender Y.
+    tab_geoms: tuple[tuple[float, float, float, float, float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -101,6 +115,25 @@ A2 = BrickType(
     size_xyz=(5.0, 2.0, 2.0),
     rgba=(0.93, 0.78, 0.20, 1.0),
     mesh_stem="yellowPLAEXLong",
+    # Two studs along the long axis, centred in depth (Blender XY = (±1.25, 0))
+    stud_geom_xz=((-1.25, 0.0), (1.25, 0.0)),
+    stud_radius=0.65,
+    stud_height=0.30,
+    # Five tabs: one on the −X face, two on +Y (Blender), two on −Y (Blender).
+    # Positions and half-sizes are in OBJ/body-local space
+    # (OBJ-X=Blender-X, OBJ-Y=Blender-Z, OBJ-Z=−Blender-Y).
+    # TAB_DEPTH=0.25 → half=0.125; TAB_BOTTOM_WIDTH=1.0 → half=0.5;
+    # TAB_FULL_HEIGHT=2.0 → half=1.0 (same as body half-height in OBJ-Y).
+    tab_geoms=(
+        # −X tab: protrudes from x=−2.5 to x=−2.75 in Blender X
+        (-2.625, 0.0,    0.0,   0.125, 1.0, 0.5  ),
+        # +Y tabs (Blender): OBJ-Z = −Blender-Y → negative OBJ-Z
+        (-1.25,  0.0,   -1.125, 0.5,   1.0, 0.125),
+        ( 1.25,  0.0,   -1.125, 0.5,   1.0, 0.125),
+        # −Y tabs (Blender): OBJ-Z = −Blender-Y → positive OBJ-Z
+        (-1.25,  0.0,    1.125, 0.5,   1.0, 0.125),
+        ( 1.25,  0.0,    1.125, 0.5,   1.0, 0.125),
+    ),
 )
 
 C2 = BrickType(
@@ -110,6 +143,20 @@ C2 = BrickType(
     size_xyz=(2.0, 2.0, 2.0),
     rgba=(0.90, 0.83, 0.22, 1.0),
     mesh_stem="yellowPLAEXSide",
+    # One stud at the centre (Blender XY = (0, 0))
+    stud_geom_xz=((0.0, 0.0),),
+    stud_radius=0.65,
+    stud_height=0.30,
+    # Three tabs: +X, −X, and +Y (Blender). Groove is on −Y (no collision geom).
+    # BODY_X=2.0 → inner_x=±1.0, outer_x=±1.25, centre=±1.125.
+    tab_geoms=(
+        # +X tab
+        ( 1.125, 0.0,    0.0,   0.125, 1.0, 0.5  ),
+        # −X tab
+        (-1.125, 0.0,    0.0,   0.125, 1.0, 0.5  ),
+        # +Y tab (Blender) → negative OBJ-Z
+        ( 0.0,   0.0,   -1.125, 0.5,   1.0, 0.125),
+    ),
 )
 
 A1 = BrickType(
@@ -119,6 +166,18 @@ A1 = BrickType(
     size_xyz=(5.0, 2.0, 1.0),
     rgba=(0.85, 0.12, 0.12, 1.0),
     mesh_stem="redPLAEXLong",
+    # Two studs along the long axis, centred in depth (Blender XY = (±1.25, 0))
+    stud_geom_xz=((-1.25, 0.0), (1.25, 0.0)),
+    stud_radius=0.65,
+    stud_height=0.30,
+    # Same tab layout as A2 but TAB_FULL_HEIGHT=1.0 → OBJ-Y half=0.5.
+    tab_geoms=(
+        (-2.625, 0.0,    0.0,   0.125, 0.5, 0.5  ),
+        (-1.25,  0.0,   -1.125, 0.5,   0.5, 0.125),
+        ( 1.25,  0.0,   -1.125, 0.5,   0.5, 0.125),
+        (-1.25,  0.0,    1.125, 0.5,   0.5, 0.125),
+        ( 1.25,  0.0,    1.125, 0.5,   0.5, 0.125),
+    ),
 )
 
 C1 = BrickType(
@@ -128,6 +187,16 @@ C1 = BrickType(
     size_xyz=(2.0, 2.0, 1.0),
     rgba=(0.85, 0.12, 0.12, 1.0),
     mesh_stem="redPLAEXSide",
+    # One stud at the centre (Blender XY = (0, 0))
+    stud_geom_xz=((0.0, 0.0),),
+    stud_radius=0.65,
+    stud_height=0.30,
+    # Same tab layout as C2 but TAB_FULL_HEIGHT=1.0 → OBJ-Y half=0.5.
+    tab_geoms=(
+        ( 1.125, 0.0,    0.0,   0.125, 0.5, 0.5  ),
+        (-1.125, 0.0,    0.0,   0.125, 0.5, 0.5  ),
+        ( 0.0,   0.0,   -1.125, 0.5,   0.5, 0.125),
+    ),
 )
 
 @dataclass(frozen=True)
@@ -285,7 +354,6 @@ def lego_stud_positions(size_xyz: tuple[float, float, float]) -> List[tuple[floa
 
 def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[float, float, float], static: bool = True) -> str:
     sx, sy, sz = brick_type.size_xyz
-    half_extents = (sx * 0.5, sy * 0.5, sz * 0.5)
     mesh_path = mujoco_mesh_path_for(brick_type.mesh_stem)
     euler_attr = ' euler="90 0 0"' if mesh_path is not None else ''
     body_lines = [
@@ -296,10 +364,66 @@ def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[f
 
     if mesh_path is not None:
         mesh_name = f"{brick_type.display_name}_mesh"
+
+        # --- Visual geom (mesh) — collision disabled so the convex hull does not
+        #     swallow the stud cavities and studs of neighbouring bricks. ---
         body_lines.append(
-            f'      <geom name="{brick_id}_geom" type="mesh" mesh="{mesh_name}" rgba="{format_vec(brick_type.rgba)}" mass="1"/>'
+            f'      <geom name="{brick_id}_geom" type="mesh" mesh="{mesh_name}"'
+            f' rgba="{format_vec(brick_type.rgba)}" mass="0"'
+            f' contype="0" conaffinity="0"/>'
         )
+
+        # --- Collision geom: box matching the bare brick body.
+        #     Axes in OBJ / body-local space (with body euler="90 0 0"):
+        #       OBJ-X = Blender X = world X  (half = sx/2)
+        #       OBJ-Y = Blender Z (up)       (half = sz/2)
+        #       OBJ-Z = -Blender Y (depth)   (half = sy/2)
+        #     The box is transparent — the mesh handles all visuals. ---
+        half_bx = sx * 0.5
+        half_by = sz * 0.5   # OBJ-Y = height axis
+        half_bz = sy * 0.5   # OBJ-Z = depth axis
+        body_lines.append(
+            f'      <geom name="{brick_id}_body" type="box"'
+            f' size="{half_bx:.6f} {half_by:.6f} {half_bz:.6f}"'
+            f' rgba="0 0 0 0" mass="1"/>'
+        )
+
+        # --- Stud collision cylinders.
+        #     Each stud is a solid cylinder whose axis must point in OBJ-Y
+        #     (= world-Z after the body rotation).  MuJoCo cylinders default to
+        #     the geom-local Z axis, so euler="-90 0 0" on the geom rotates that
+        #     local Z onto OBJ-Y:  Rx(-90°) maps (0,0,1) → (0,1,0).
+        #     Stud OBJ-Y centre = half body height + half stud height. ---
+        if brick_type.stud_geom_xz and brick_type.stud_radius > 0.0:
+            stud_center_y = half_by + brick_type.stud_height * 0.5
+            stud_half_h   = brick_type.stud_height * 0.5
+            for s_idx, (s_x, s_z) in enumerate(brick_type.stud_geom_xz, start=1):
+                body_lines.append(
+                    f'      <geom name="{brick_id}_stud_{s_idx}" type="cylinder"'
+                    f' pos="{s_x:.6f} {stud_center_y:.6f} {s_z:.6f}"'
+                    f' euler="-90 0 0"'
+                    f' size="{brick_type.stud_radius:.6f} {stud_half_h:.6f}"'
+                    f' rgba="0 0 0 0" mass="0.05"/>'
+                )
+
+        # --- Tab collision boxes (bounding-box approximation of trapezoidal tabs).
+        #     Tabs are protrusions on the brick faces; without these geoms they pass
+        #     freely through neighbouring bricks.  Each entry in tab_geoms is
+        #     (pos_x, pos_y, pos_z, half_x, half_y, half_z) in OBJ/body-local space.
+        #     The box slightly overshoots the narrow (top) edge of each trapezoid
+        #     but accurately covers the wide (bottom) edge, which is the critical
+        #     contact surface for preventing tabs from merging. ---
+        for t_idx, (tx, ty, tz, thx, thy, thz) in enumerate(brick_type.tab_geoms, start=1):
+            body_lines.append(
+                f'      <geom name="{brick_id}_tab_{t_idx}" type="box"'
+                f' pos="{tx:.6f} {ty:.6f} {tz:.6f}"'
+                f' size="{thx:.6f} {thy:.6f} {thz:.6f}"'
+                f' rgba="0 0 0 0" mass="0"/>'
+            )
     else:
+        # Procedural (non-mesh) brick: plain box, optional lego stud cylinders.
+        # These are already in world/body frame (no euler on body).
+        half_extents = (sx * 0.5, sy * 0.5, sz * 0.5)
         body_lines.append(
             f'      <geom name="{brick_id}_geom" type="box" size="{format_vec(half_extents)}" rgba="{format_vec(brick_type.rgba)}" mass="1"/>'
         )
