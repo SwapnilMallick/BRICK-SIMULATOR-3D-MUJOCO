@@ -1,0 +1,2 @@
+moveBrick("InventoryA2_250", 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+moveBrick("InventoryA2_249", 0.0, 0.0, 0.0, 0.0, 0.0, 3.0)
