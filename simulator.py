@@ -39,6 +39,19 @@ class BrickType:
     # tabs from passing through each other or through neighbouring bodies.
     # OBJ axes: OBJ-X = Blender X, OBJ-Y = Blender Z (up), OBJ-Z = -Blender Y.
     tab_geoms: tuple[tuple[float, float, float, float, float, float], ...] = ()
+    # Depth of the groove on the +X face (OBJ-X units).  The body collision box
+    # is trimmed by this amount on the +X side so that the groove cavity is left
+    # as free space for an adjacent brick's tab to enter.  0.0 means no groove.
+    groove_depth_x: float = 0.0
+    # Groove guard geoms (in OBJ/body-local space).
+    # Same format as tab_geoms: (pos_x, pos_y, pos_z, half_x, half_y, half_z).
+    # These are thin boxes covering the solid face material that FLANKS the groove
+    # opening on the +X face — i.e., the parts of that face outside the groove
+    # width in OBJ-Z.  They restore collision coverage for the face area that was
+    # stripped away when the body box was trimmed, so that a tab approaching from
+    # outside the groove opening is correctly blocked instead of slipping through
+    # the ghost zone between the trimmed body box and the visual mesh.
+    groove_guard_geoms: tuple[tuple[float, float, float, float, float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -133,6 +146,27 @@ A2 = BrickType(
         # −Y tabs (Blender): OBJ-Z = −Blender-Y → positive OBJ-Z
         (-1.25,  0.0,    1.125, 0.5,   1.0, 0.125),
         ( 1.25,  0.0,    1.125, 0.5,   1.0, 0.125),
+    ),
+    # The +X face has a 0.25-unit-deep groove; trim the body box so that
+    # the groove cavity is free for an adjacent brick's −X tab to enter.
+    groove_depth_x=0.25,
+    # Two guards restore collision coverage for the solid face material that
+    # flanks the groove opening (OBJ-Z outside ±0.5) in the groove depth zone.
+    # Without them, the trimmed body box leaves a ghost zone (OBJ-X 2.25–2.5)
+    # where the visual mesh is solid but no collision geom exists, letting a
+    # misaligned tab pass through the face instead of being blocked.
+    #
+    #   +OBJ-Z strip: covers OBJ-X [2.25, 2.5], OBJ-Z [+0.5, +1.0]
+    #   −OBJ-Z strip: covers OBJ-X [2.25, 2.5], OBJ-Z [−0.5, −1.0]
+    groove_guard_geoms=(
+        # Guards start at OBJ-Z ±0.52, giving a 0.02-unit clearance beyond the
+        # tab half-width (±0.50).  This prevents boundary friction when the tab
+        # enters the groove perfectly aligned, while still blocking a misaligned
+        # tab that strays even a small amount outside the groove opening.
+        # OBJ-Z [+0.52, +1.0]: centre = 0.76, half = 0.24
+        (2.375, 0.0,  0.76, 0.125, 1.0, 0.24),
+        # OBJ-Z [−0.52, −1.0]: centre = −0.76, half = 0.24
+        (2.375, 0.0, -0.76, 0.125, 1.0, 0.24),
     ),
 )
 
@@ -378,12 +412,20 @@ def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[f
         #       OBJ-X = Blender X = world X  (half = sx/2)
         #       OBJ-Y = Blender Z (up)       (half = sz/2)
         #       OBJ-Z = -Blender Y (depth)   (half = sy/2)
-        #     The box is transparent — the mesh handles all visuals. ---
-        half_bx = sx * 0.5
+        #     The box is transparent — the mesh handles all visuals.
+        #
+        #     If the brick has a groove on the +X face (groove_depth_x > 0),
+        #     the body box is shortened on the +X side by that depth and its
+        #     centre is shifted accordingly.  This leaves the groove cavity as
+        #     free space so that an adjacent brick's tab can physically enter it. ---
+        gd = brick_type.groove_depth_x
+        half_bx = (sx - gd) * 0.5
+        pos_bx  = -gd * 0.5           # shift centre toward −X by half the groove depth
         half_by = sz * 0.5   # OBJ-Y = height axis
         half_bz = sy * 0.5   # OBJ-Z = depth axis
         body_lines.append(
             f'      <geom name="{brick_id}_body" type="box"'
+            f' pos="{pos_bx:.6f} 0.000000 0.000000"'
             f' size="{half_bx:.6f} {half_by:.6f} {half_bz:.6f}"'
             f' rgba="0 0 0 0" mass="1"/>'
         )
@@ -470,6 +512,21 @@ def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[f
                 f'      <geom name="{brick_id}_tab_{t_idx}" type="box"'
                 f' pos="{tx:.6f} {ty:.6f} {tz:.6f}"'
                 f' size="{thx:.6f} {thy:.6f} {thz:.6f}"'
+                f' rgba="0 0 0 0" mass="0"/>'
+            )
+
+        # --- Groove guard boxes.
+        #     The body box is trimmed on the +X side by groove_depth_x to leave the
+        #     groove cavity free.  That trimming also removes collision coverage for
+        #     the solid face material that flanks the groove opening in OBJ-Z.
+        #     These guards restore that coverage: a misaligned tab that misses the
+        #     groove opening will now hit a guard box and be blocked, rather than
+        #     silently passing through the visual mesh into the ghost zone. ---
+        for g_idx, (gx, gy, gz, ghx, ghy, ghz) in enumerate(brick_type.groove_guard_geoms, start=1):
+            body_lines.append(
+                f'      <geom name="{brick_id}_groove_guard_{g_idx}" type="box"'
+                f' pos="{gx:.6f} {gy:.6f} {gz:.6f}"'
+                f' size="{ghx:.6f} {ghy:.6f} {ghz:.6f}"'
                 f' rgba="0 0 0 0" mass="0"/>'
             )
     else:

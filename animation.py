@@ -11,7 +11,7 @@ import mujoco
 PHASE_DURATION = 1.2      # wall-clock seconds per animation phase
 PHASES_PER_BRICK = 3      # arc-to-above-target → lower-to-release → physics settle
 LIFT_CLEARANCE = 15.0     # MuJoCo units above the higher of src/tgt during arc
-RELEASE_CLEARANCE = 1.0   # MuJoCo units above tgt_pos to stop kinematic drive
+RELEASE_CLEARANCE = 2.0   # MuJoCo units above tgt_pos to stop kinematic drive
                            # and hand the brick over to physics
 
 
