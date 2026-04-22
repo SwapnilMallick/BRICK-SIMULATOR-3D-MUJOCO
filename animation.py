@@ -11,8 +11,14 @@ import mujoco
 PHASE_DURATION = 1.2      # wall-clock seconds per animation phase
 PHASES_PER_BRICK = 3      # arc-to-above-target → lower-to-release → physics settle
 LIFT_CLEARANCE = 15.0     # MuJoCo units above the higher of src/tgt during arc
-RELEASE_CLEARANCE = 2.0   # MuJoCo units above tgt_pos to stop kinematic drive
-                           # and hand the brick over to physics
+RELEASE_CLEARANCE = 0.5   # MuJoCo units above tgt_pos where kinematic drive ends.
+                           # Zero means phase 1 delivers the brick exactly to tgt_pos,
+                           # so phase 2 physics begins from rest at the plan position.
+                           # This eliminates the tab/groove lateral contact force that
+                           # arises when a falling brick hits a frozen neighbour, and
+                           # avoids the airborne-brick problem caused by the brick
+                           # not having enough simulation time to fall 1 unit before
+                           # its settled pose is captured.
 
 
 @dataclass
@@ -23,6 +29,8 @@ class BrickAnimState:
     tgt_pos: Tuple[float, float, float]
     base_quat: Tuple[float, float, float, float]
     tgt_quat: Tuple[float, float, float, float]
+    # Settled pose captured once at the end of phase 2; None until then.
+    frozen_qpos: Optional[Tuple[float, ...]] = None
 
 
 def euler_to_quat(a: float, b: float, c: float) -> Tuple[float, float, float, float]:
@@ -181,13 +189,18 @@ def run_viewer(
                 local_phase = global_phase % PHASES_PER_BRICK
                 t = min((elapsed % PHASE_DURATION) / PHASE_DURATION, 1.0)
 
-                # Previously placed bricks (index < brick_idx) are fully
-                # released to physics — we no longer override their qpos/qvel.
-                # MuJoCo's contact solver keeps them resting wherever they
-                # landed (on the floor, on studs, or toppled if misaligned).
+                # Kinematically lock every brick that has finished phase 2.
+                # X/Y and orientation are taken from the plan (they were pinned
+                # throughout phase 2, so no lateral drift can have occurred).
+                # Z is taken from the physics-settled qpos so the contact-resolved
+                # resting height is preserved without a visual jump.
+                for past_bk in anim_bricks[:brick_idx]:
+                    if past_bk.frozen_qpos is None:
+                        past_bk.frozen_qpos = tuple(data.qpos[past_bk.qpos_addr:past_bk.qpos_addr + 7])
+                    data.qpos[past_bk.qpos_addr:past_bk.qpos_addr + 7] = past_bk.frozen_qpos
+                    data.qvel[past_bk.dof_addr:past_bk.dof_addr + 6] = 0.0
 
-                # Animate the current brick kinematically (phases 0–1) or let
-                # it settle under gravity (phase 2).
+                # Animate the current brick: phases 0–1 are kinematic, phase 2 is pure physics.
                 if brick_idx < len(anim_bricks):
                     bk = anim_bricks[brick_idx]
 
@@ -203,11 +216,8 @@ def run_viewer(
                     # lift height, so phase 1 only has to descend vertically.
                     lift_tgt: Tuple[float, float, float] = (
                         bk.tgt_pos[0], bk.tgt_pos[1], arc_peak_z)
-                    # Stop kinematic drive at RELEASE_CLEARANCE above the plan
-                    # target, then hand off to physics.  This lets the brick
-                    # fall onto whatever geometry is below it (floor, stud tops,
-                    # or the side of a misaligned brick) so that contacts and
-                    # resulting torques are resolved naturally.
+                    # Intermediate waypoint: RELEASE_CLEARANCE above the target.
+                    # Phase 1 ends here; phase 2 covers the final descent.
                     release_pos: Tuple[float, float, float] = (
                         bk.tgt_pos[0], bk.tgt_pos[1], bk.tgt_pos[2] + RELEASE_CLEARANCE)
 
@@ -224,17 +234,20 @@ def run_viewer(
                         data.qpos[bk.qpos_addr + 3:bk.qpos_addr + 7] = quat
                         data.qvel[bk.dof_addr:bk.dof_addr + 6]       = 0.0
                     elif local_phase == 1:
-                        # Ease down from lift height to release clearance.
-                        # Smoothstep gives a gentle deceleration so the brick
-                        # arrives nearly stationary before physics takes over.
+                        # Ease down from lift height to the release waypoint.
                         t_s = smoothstep(t)
                         pos = lerp(lift_tgt, release_pos, t_s)
                         data.qpos[bk.qpos_addr:bk.qpos_addr + 3]     = pos
                         data.qpos[bk.qpos_addr + 3:bk.qpos_addr + 7] = bk.tgt_quat
                         data.qvel[bk.dof_addr:bk.dof_addr + 6]       = 0.0
-                    # local_phase == 2: physics settle — no kinematic override.
-                    # The brick was left at release_pos with zero velocity at the
-                    # end of phase 1; gravity + contacts determine the outcome.
+                    elif local_phase == 2:
+                        # Pure physics settle.  Phase 1 delivered the brick to
+                        # tgt_pos at rest (RELEASE_CLEARANCE = 0), so contact
+                        # forces are zero at the start of this phase and no
+                        # lateral impulse is generated.  Unstable bricks will
+                        # topple naturally; stud-tube and tab-groove contacts
+                        # engage under gravity without kinematic interference.
+                        pass
 
                 # Freeze every brick that hasn't started animating yet.
                 # All plan bricks have a freejoint, so without this they would

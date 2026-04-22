@@ -1,0 +1,48 @@
+
+pick("InventoryA2_250")
+orient(0.0, 0.0, 0.0)
+place(0.0, 0.0, 1.0)
+
+pick("InventoryA2_249")
+orient(0.0, 0.0, 0.0)
+place(5.0, 0.0, 1.0)
+
+pick("InventoryA2_248")
+orient(0.0, 0.0, 0.0)
+place(10.0, 0.0, 1.0)
+
+pick("InventoryA2_247")
+orient(0.0, 0.0, 0.0)
+place(15.0, 0.0, 1.0)
+
+pick("InventoryA2_246")
+orient(0.0, 0.0, 0.0)
+place(0.0, 0.0, 3.0)
+
+pick("InventoryA2_245")
+orient(0.0, 0.0, 0.0)
+place(4.7, 0.0, 3.0)
+
+pick("InventoryA2_244")
+orient(0.0, 0.0, 0.0)
+place(10.0, 0.0, 3.0)
+
+pick("InventoryA2_243")
+orient(0.0, 0.0, 0.0)
+place(15.0, 0.0, 3.0)
+
+pick("InventoryA2_242")
+orient(0.0, 0.0, 0.0)
+place(0.0, 0.0, 5.0)
+
+pick("InventoryA2_241")
+orient(0.0, 0.0, 0.0)
+place(5.0, 0.0, 5.0)
+
+pick("InventoryA2_240")
+orient(0.0, 0.0, 0.0)
+place(10.0, 0.0, 5.0)
+
+pick("InventoryA2_239")
+orient(0.0, 0.0, 0.0)
+place(15.0, 0.0, 5.0)

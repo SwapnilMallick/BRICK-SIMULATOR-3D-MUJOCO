@@ -5192,6 +5192,7 @@
       <geom name="InventoryA2_246_groove_guard_2" type="box" pos="2.375000 0.000000 -0.760000" size="0.125000 1.000000 0.240000" rgba="0 0 0 0" mass="0"/>
     </body>
     <body name="InventoryA2_247" pos="-40.750000 37.000000 19.900000" euler="90 0 0">
+      <freejoint/>
       <geom name="InventoryA2_247_geom" type="mesh" mesh="a2_brick_mesh" rgba="0.930000 0.780000 0.200000 1.000000" mass="0" contype="0" conaffinity="0"/>
       <geom name="InventoryA2_247_body" type="box" pos="-0.125000 0.000000 0.000000" size="2.375000 1.000000 1.000000" rgba="0 0 0 0" mass="1"/>
       <geom name="InventoryA2_247_stud_1" type="cylinder" pos="-1.250000 1.150000 0.000000" euler="-90 0 0" size="0.650000 0.150000" rgba="0 0 0 0" mass="0.05" contype="2" conaffinity="2"/>
@@ -5213,6 +5214,7 @@
       <geom name="InventoryA2_247_groove_guard_2" type="box" pos="2.375000 0.000000 -0.760000" size="0.125000 1.000000 0.240000" rgba="0 0 0 0" mass="0"/>
     </body>
     <body name="InventoryA2_248" pos="-35.000000 37.000000 19.900000" euler="90 0 0">
+      <freejoint/>
       <geom name="InventoryA2_248_geom" type="mesh" mesh="a2_brick_mesh" rgba="0.930000 0.780000 0.200000 1.000000" mass="0" contype="0" conaffinity="0"/>
       <geom name="InventoryA2_248_body" type="box" pos="-0.125000 0.000000 0.000000" size="2.375000 1.000000 1.000000" rgba="0 0 0 0" mass="1"/>
       <geom name="InventoryA2_248_stud_1" type="cylinder" pos="-1.250000 1.150000 0.000000" euler="-90 0 0" size="0.650000 0.150000" rgba="0 0 0 0" mass="0.05" contype="2" conaffinity="2"/>
