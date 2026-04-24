@@ -39,6 +39,12 @@ class BrickType:
     # tabs from passing through each other or through neighbouring bodies.
     # OBJ axes: OBJ-X = Blender X, OBJ-Y = Blender Z (up), OBJ-Z = -Blender Y.
     tab_geoms: tuple[tuple[float, float, float, float, float, float], ...] = ()
+    # Mesh-based tab collision geometry (in OBJ/body-local space).
+    # stem: the mesh file stem (without extension) in BlenderFiles/ for the tab shape.
+    # tab_mesh_geoms: each entry is (pos_x, pos_y, pos_z, euler_x, euler_y, euler_z).
+    # When set, tab_mesh_geoms is used instead of tab_geoms for this brick type.
+    tab_mesh_stem: str | None = None
+    tab_mesh_geoms: tuple[tuple[float, float, float, float, float, float], ...] = ()
     # Depth of the groove on the +X face (OBJ-X units).  The body collision box
     # is trimmed by this amount on the +X side so that the groove cavity is left
     # as free space for an adjacent brick's tab to enter.  0.0 means no groove.
@@ -137,15 +143,23 @@ A2 = BrickType(
     # (OBJ-X=Blender-X, OBJ-Y=Blender-Z, OBJ-Z=−Blender-Y).
     # TAB_DEPTH=0.25 → half=0.125; TAB_BOTTOM_WIDTH=1.0 → half=0.5;
     # TAB_FULL_HEIGHT=2.0 → half=1.0 (same as body half-height in OBJ-Y).
-    tab_geoms=(
-        # −X tab: protrudes from x=−2.5 to x=−2.75 in Blender X
-        (-2.625, 0.0,    0.0,   0.125, 1.0, 0.5  ),
-        # +Y tabs (Blender): OBJ-Z = −Blender-Y → negative OBJ-Z
-        (-1.25,  0.0,   -1.125, 0.5,   1.0, 0.125),
-        ( 1.25,  0.0,   -1.125, 0.5,   1.0, 0.125),
-        # −Y tabs (Blender): OBJ-Z = −Blender-Y → positive OBJ-Z
-        (-1.25,  0.0,    1.125, 0.5,   1.0, 0.125),
-        ( 1.25,  0.0,    1.125, 0.5,   1.0, 0.125),
+    tab_mesh_stem="plaex_tab",
+    # Five tabs in mesh form: one on −X face, two on +OBJ-Z (Blender −Y), two on −OBJ-Z (Blender +Y).
+    # Each entry is (pos_x, pos_y, pos_z, euler_x, euler_y, euler_z) in OBJ/body-local space.
+    # The canonical plaex_tab mesh has its tab protruding in the −OBJ-X direction
+    # with the inner face at OBJ-X = −2.5 and outer face at OBJ-X = −2.75.
+    # Side tabs use Ry(±90°) to redirect the protrusion axis; the Z offset places
+    # the (rotated) inner face at the body face (OBJ-Z = ±1.0).
+    tab_mesh_geoms=(
+        # −X tab: no rotation needed; mesh is already aligned
+        ( 0.0,  0.0,  0.0,  0.0,   0.0,  0.0),
+        # +OBJ-Z face tabs at X = ±1.25: Ry(−90°) redirects protrusion to +OBJ-Z;
+        # Z offset +1.5 = body half-depth (1.0) + tab_depth/2 offset to inner face
+        (-1.25, 0.0,  1.5,  0.0, -90.0,  0.0),
+        ( 1.25, 0.0,  1.5,  0.0, -90.0,  0.0),
+        # −OBJ-Z face tabs at X = ±1.25: Ry(+90°) redirects protrusion to −OBJ-Z
+        (-1.25, 0.0, -1.5,  0.0,  90.0,  0.0),
+        ( 1.25, 0.0, -1.5,  0.0,  90.0,  0.0),
     ),
     # The +X face has a 0.25-unit-deep groove; trim the body box so that
     # the groove cavity is free for an adjacent brick's −X tab to enter.
@@ -482,20 +496,27 @@ def build_brick_body_xml(brick_type: BrickType, brick_id: str, position: tuple[f
                     f' rgba="0 0 0 0" mass="0" contype="2" conaffinity="2"/>'
                 )
 
-        # --- Tab collision boxes (bounding-box approximation of trapezoidal tabs).
-        #     Tabs are protrusions on the brick faces; without these geoms they pass
-        #     freely through neighbouring bricks.  Each entry in tab_geoms is
-        #     (pos_x, pos_y, pos_z, half_x, half_y, half_z) in OBJ/body-local space.
-        #     The box slightly overshoots the narrow (top) edge of each trapezoid
-        #     but accurately covers the wide (bottom) edge, which is the critical
-        #     contact surface for preventing tabs from merging. ---
-        for t_idx, (tx, ty, tz, thx, thy, thz) in enumerate(brick_type.tab_geoms, start=1):
-            body_lines.append(
-                f'      <geom name="{brick_id}_tab_{t_idx}" type="box"'
-                f' pos="{tx:.6f} {ty:.6f} {tz:.6f}"'
-                f' size="{thx:.6f} {thy:.6f} {thz:.6f}"'
-                f' rgba="0 0 0 0" mass="0"/>'
-            )
+        # --- Tab collision geometry.
+        #     If the brick type has a mesh-based tab, emit type="mesh" geoms using
+        #     the canonical plaex_tab mesh reused at different positions/orientations.
+        #     Otherwise fall back to bounding-box approximations from tab_geoms. ---
+        if brick_type.tab_mesh_stem and brick_type.tab_mesh_geoms:
+            mesh_name = f"{brick_type.tab_mesh_stem}_mesh"
+            for t_idx, (tx, ty, tz, ex, ey, ez) in enumerate(brick_type.tab_mesh_geoms, start=1):
+                body_lines.append(
+                    f'      <geom name="{brick_id}_tab_{t_idx}" type="mesh" mesh="{mesh_name}"'
+                    f' pos="{tx:.6f} {ty:.6f} {tz:.6f}"'
+                    f' euler="{ex:.6f} {ey:.6f} {ez:.6f}"'
+                    f' rgba="0 0 0 0" mass="0"/>'
+                )
+        else:
+            for t_idx, (tx, ty, tz, thx, thy, thz) in enumerate(brick_type.tab_geoms, start=1):
+                body_lines.append(
+                    f'      <geom name="{brick_id}_tab_{t_idx}" type="box"'
+                    f' pos="{tx:.6f} {ty:.6f} {tz:.6f}"'
+                    f' size="{thx:.6f} {thy:.6f} {thz:.6f}"'
+                    f' rgba="0 0 0 0" mass="0"/>'
+                )
 
         # --- Groove guard boxes.
         #     The body box is trimmed on the +X side by groove_depth_x to leave the
@@ -546,6 +567,21 @@ def build_asset_section() -> str:
         relative_path = mesh_path.relative_to(WORKSPACE_ROOT)
         mesh_lines.append(
             f'    <mesh name="{brick_type.display_name}_mesh" file="{relative_path.as_posix()}"/>'
+        )
+
+    # Register tab mesh assets for any brick type that uses mesh-based tabs.
+    seen_tab_stems: set[str] = set()
+    for brick_type in all_brick_types:
+        stem = brick_type.tab_mesh_stem
+        if stem is None or stem in seen_tab_stems:
+            continue
+        seen_tab_stems.add(stem)
+        tab_mesh_path = mujoco_mesh_path_for(stem)
+        if tab_mesh_path is None:
+            continue
+        relative_path = tab_mesh_path.relative_to(WORKSPACE_ROOT)
+        mesh_lines.append(
+            f'    <mesh name="{stem}_mesh" file="{relative_path.as_posix()}"/>'
         )
 
     if not mesh_lines:
