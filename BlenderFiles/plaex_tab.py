@@ -6,6 +6,7 @@ from mathutils import Vector
 
 OBJ_NAME = "PLAEX_Long_Tab"
 
+
 BODY_X = 5
 BODY_Y = 2
 BODY_Z = 2
@@ -178,8 +179,6 @@ def print_mesh_health(obj):
     print("Non-manifold edges:", len(non_manifold_edges))
     bm.free()
     
-    
-
 
 def main():
     clear_scene()

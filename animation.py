@@ -12,14 +12,7 @@ PHASE_DURATION = 1.2      # wall-clock seconds per animation phase
 PHASES_PER_BRICK = 3      # arc-to-above-target → lower-to-release → physics settle
 LIFT_CLEARANCE = 15.0     # MuJoCo units above the higher of src/tgt during arc
 RELEASE_CLEARANCE = 0.5   # MuJoCo units above tgt_pos where kinematic drive ends.
-                           # Zero means phase 1 delivers the brick exactly to tgt_pos,
-                           # so phase 2 physics begins from rest at the plan position.
-                           # This eliminates the tab/groove lateral contact force that
-                           # arises when a falling brick hits a frozen neighbour, and
-                           # avoids the airborne-brick problem caused by the brick
-                           # not having enough simulation time to fall 1 unit before
-                           # its settled pose is captured.
-
+                           
 
 @dataclass
 class BrickAnimState:
